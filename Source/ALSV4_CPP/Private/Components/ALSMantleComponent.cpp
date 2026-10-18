@@ -139,12 +139,11 @@ void UALSMantleComponent::MantleStart(float MantleHeight, const FALSComponentAnd
 	MantleTimeline->SetPlayRate(MantleParams.PlayRate);
 	MantleTimeline->PlayFromStart();
 
-	// Step 7: Play the Anim Montage if valid.
-	if (MantleParams.AnimMontage && OwnerCharacter->GetMesh()->GetAnimInstance())
+	// Step 7: Play the Anim Montage if valid. Routed through the character's animation provider
+	// interface so mantle animations can be handled by custom/other-engine animation systems.
+	if (MantleParams.AnimMontage)
 	{
-		OwnerCharacter->GetMesh()->GetAnimInstance()->Montage_Play(MantleParams.AnimMontage, MantleParams.PlayRate,
-		                                                    EMontagePlayReturnType::MontageLength,
-		                                                    MantleParams.StartingPosition, false);
+		OwnerCharacter->ALS_PlayMontage(MantleParams.AnimMontage, MantleParams.PlayRate, MantleParams.StartingPosition);
 	}
 }
 

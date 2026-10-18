@@ -27,9 +27,9 @@ static FORCEINLINE FString GetEnumerationToString(const Enumeration InValue)
 UENUM(BlueprintType, meta = (ScriptName = "ALS_Gait"))
 enum class EALSGait : uint8
 {
-	Walking,
-	Running,
-	Sprinting
+	Walking UMETA(DisplayName = "Walking", Tooltip = "Slowest movement speed tier. Recommended default for browser-based and mobile game engines where lower animation blend complexity is preferred."),
+	Running UMETA(DisplayName = "Running", Tooltip = "Default locomotion speed tier."),
+	Sprinting UMETA(DisplayName = "Sprinting", Tooltip = "Highest locomotion speed tier.")
 };
 
 /**

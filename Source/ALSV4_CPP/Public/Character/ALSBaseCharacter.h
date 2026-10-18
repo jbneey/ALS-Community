@@ -6,6 +6,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/TimelineComponent.h"
+#include "Library/ALSAnimationProvider.h"
 #include "Library/ALSCharacterEnumLibrary.h"
 #include "Library/ALSCharacterStructLibrary.h"
 #include "Engine/DataTable.h"
@@ -16,6 +17,8 @@
 // forward declarations
 class UALSDebugComponent;
 class UAnimMontage;
+class UAnimInstance;
+class USkeletalMeshComponent;
 class UALSPlayerCameraBehavior;
 enum class EVisibilityBasedAnimTickOption : uint8;
 
@@ -27,12 +30,25 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRagdollStateChangedSignature, bool,
  * Base character class
  */
 UCLASS(BlueprintType)
-class ALSV4_CPP_API AALSBaseCharacter : public ACharacter
+class ALSV4_CPP_API AALSBaseCharacter : public ACharacter, public IALSAnimationProviderInterface
 {
 	GENERATED_BODY()
 
 public:
 	AALSBaseCharacter(const FObjectInitializer& ObjectInitializer);
+
+	/** IALSAnimationProviderInterface. Default implementations drive this character's own Anim Blueprint.
+	 * Override (in C++ or Blueprint) to route animation requests to a different/custom animation system,
+	 * e.g. when reusing ALS locomotion logic in other engines, custom rendering stacks or headless builds. */
+	virtual EALSAnimationPlayResult ALS_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate, float StartingPosition) override;
+	virtual void ALS_StopMontage_Implementation(float BlendOutTime) override;
+	virtual void ALS_SavePoseSnapshot_Implementation(FName SnapshotName) override;
+	virtual float ALS_GetCurveValue_Implementation(FName CurveName) const override;
+	virtual USkeletalMeshComponent* ALS_GetVisualMeshComponent_Implementation() const override;
+
+	/** Returns the AnimInstance driving this character's visual mesh, if any.
+	 * Safe on headless/dedicated servers and meshes without an Anim Blueprint. */
+	UAnimInstance* GetALSAnimInstance() const;
 
 	UFUNCTION(BlueprintCallable, Category = "ALS|Movement")
 	FORCEINLINE class UALSCharacterMovementComponent* GetMyMovementComponent() const
