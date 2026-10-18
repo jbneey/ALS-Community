@@ -71,12 +71,63 @@ void AALSBaseCharacter::OnBreakfall_Implementation()
 void AALSBaseCharacter::Replicated_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate)
 {
 	// Roll: Simply play a Root Motion Montage.
-	if (GetMesh()->GetAnimInstance())
-	{
-		GetMesh()->GetAnimInstance()->Montage_Play(Montage, PlayRate);
-	}
+	// Routed through the animation provider interface so the visual layer can be swapped
+	// for a custom/other-engine animation system (or removed entirely on headless builds).
+	ALS_PlayMontage(Montage, PlayRate, 0.0f);
 
 	Server_PlayMontage(Montage, PlayRate);
+}
+
+UAnimInstance* AALSBaseCharacter::GetALSAnimInstance() const
+{
+	USkeletalMeshComponent* VisualMesh = ALS_GetVisualMeshComponent();
+	return VisualMesh ? VisualMesh->GetAnimInstance() : nullptr;
+}
+
+EALSAnimationPlayResult AALSBaseCharacter::ALS_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate, float StartingPosition)
+{
+	UAnimInstance* AnimInstance = GetALSAnimInstance();
+	if (!AnimInstance || !Montage)
+	{
+		return EALSAnimationPlayResult::Unavailable;
+	}
+
+	AnimInstance->Montage_Play(Montage, PlayRate, EMontagePlayReturnType::MontageLength, StartingPosition, false);
+	return EALSAnimationPlayResult::Played;
+}
+
+void AALSBaseCharacter::ALS_StopMontage_Implementation(float BlendOutTime)
+{
+	UAnimInstance* AnimInstance = GetALSAnimInstance();
+	if (AnimInstance)
+	{
+		AnimInstance->Montage_Stop(BlendOutTime);
+	}
+}
+
+void AALSBaseCharacter::ALS_SavePoseSnapshot_Implementation(FName SnapshotName)
+{
+	UAnimInstance* AnimInstance = GetALSAnimInstance();
+	if (AnimInstance)
+	{
+		AnimInstance->SavePoseSnapshot(SnapshotName);
+	}
+}
+
+float AALSBaseCharacter::ALS_GetCurveValue_Implementation(FName CurveName) const
+{
+	UAnimInstance* AnimInstance = GetALSAnimInstance();
+	if (AnimInstance)
+	{
+		return AnimInstance->GetCurveValue(CurveName);
+	}
+
+	return 0.0f;
+}
+
+USkeletalMeshComponent* AALSBaseCharacter::ALS_GetVisualMeshComponent_Implementation() const
+{
+	return GetMesh();
 }
 
 void AALSBaseCharacter::BeginPlay()
@@ -87,7 +138,12 @@ void AALSBaseCharacter::BeginPlay()
 	bEnableNetworkOptimizations = !IsNetMode(NM_Standalone);
 
 	// Make sure the mesh and animbp update after the CharacterBP to ensure it gets the most recent values.
-	GetMesh()->AddTickPrerequisiteActor(this);
+	// Null-guarded so characters can run without a visual mesh (headless/dedicated servers,
+	// custom rendering pipelines or other engines driving ALS logic remotely).
+	if (USkeletalMeshComponent* VisualMesh = ALS_GetVisualMeshComponent())
+	{
+		VisualMesh->AddTickPrerequisiteActor(this);
+	}
 
 	// Set the Movement Model
 	SetMovementModel();
@@ -109,9 +165,10 @@ void AALSBaseCharacter::BeginPlay()
 	LastVelocityRotation = TargetRotation;
 	LastMovementInputRotation = TargetRotation;
 
-	if (GetMesh()->GetAnimInstance() && GetLocalRole() == ROLE_SimulatedProxy)
+	UAnimInstance* SimulatedAnimInstance = GetALSAnimInstance();
+	if (SimulatedAnimInstance && GetLocalRole() == ROLE_SimulatedProxy)
 	{
-		GetMesh()->GetAnimInstance()->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
+		SimulatedAnimInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
 	}
 
 	MyCharacterMovementComponent->SetMovementSettings(GetTargetMovementSettings());
@@ -178,11 +235,8 @@ void AALSBaseCharacter::RagdollStart()
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GetMesh()->SetAllBodiesBelowSimulatePhysics(NAME_Pelvis, true, true);
 
-	// Step 3: Stop any active montages.
-	if (GetMesh()->GetAnimInstance())
-	{
-		GetMesh()->GetAnimInstance()->Montage_Stop(0.2f);
-	}
+	// Step 3: Stop any active montages (routed through the animation provider interface).
+	ALS_StopMontage(0.2f);
 
 	// Fixes character mesh is showing default A pose for a split-second just before ragdoll ends in listen server games
 	GetMesh()->bOnlyAllowAutonomousTickPose = true;
@@ -208,20 +262,14 @@ void AALSBaseCharacter::RagdollEnd()
 	SetReplicateMovement(true);
 
 	// Step 1: Save a snapshot of the current Ragdoll Pose for use in AnimGraph to blend out of the ragdoll
-	if (GetMesh()->GetAnimInstance())
-	{
-		GetMesh()->GetAnimInstance()->SavePoseSnapshot(NAME_RagdollPose);
-	}
+	ALS_SavePoseSnapshot(NAME_RagdollPose);
 
 	// Step 2: If the ragdoll is on the ground, set the movement mode to walking and play a Get Up animation.
 	// If not, set the movement mode to falling and update the character movement velocity to match the last ragdoll velocity.
 	if (bRagdollOnGround)
 	{
 		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
-		if (GetMesh()->GetAnimInstance())
-		{
-			GetMesh()->GetAnimInstance()->Montage_Play(GetGetUpAnimation(bRagdollFaceUp), 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
-		}
+		ALS_PlayMontage(GetGetUpAnimation(bRagdollFaceUp), 1.0f, 0.0f);
 	}
 	else
 	{
@@ -441,10 +489,7 @@ void AALSBaseCharacter::EventOnJumped()
 
 void AALSBaseCharacter::Server_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate)
 {
-	if (GetMesh()->GetAnimInstance())
-	{
-		GetMesh()->GetAnimInstance()->Montage_Play(Montage, PlayRate);
-	}
+	ALS_PlayMontage(Montage, PlayRate, 0.0f);
 
 	ForceNetUpdate();
 	Multicast_PlayMontage(Montage, PlayRate);
@@ -452,9 +497,9 @@ void AALSBaseCharacter::Server_PlayMontage_Implementation(UAnimMontage* Montage,
 
 void AALSBaseCharacter::Multicast_PlayMontage_Implementation(UAnimMontage* Montage, float PlayRate)
 {
-	if (GetMesh()->GetAnimInstance() && !IsLocallyControlled())
+	if (!IsLocallyControlled())
 	{
-		GetMesh()->GetAnimInstance()->Montage_Play(Montage, PlayRate);
+		ALS_PlayMontage(Montage, PlayRate, 0.0f);
 	}
 }
 
@@ -589,12 +634,8 @@ FVector AALSBaseCharacter::GetMovementInput() const
 
 float AALSBaseCharacter::GetAnimCurveValue(FName CurveName) const
 {
-	if (GetMesh()->GetAnimInstance())
-	{
-		return GetMesh()->GetAnimInstance()->GetCurveValue(CurveName);
-	}
-
-	return 0.0f;
+	// Delegates to the animation provider interface so curve reads work with custom animation systems too.
+	return ALS_GetCurveValue(CurveName);
 }
 
 void AALSBaseCharacter::SetVisibleMesh(USkeletalMesh* NewVisibleMesh)

@@ -118,6 +118,19 @@ struct FALSMantleAsset
 
 	UPROPERTY(EditAnywhere, Category = "Mantle System")
 	float HighStartPosition = 0.0f;
+
+	/**
+	 * Lightweight mantling profile for constrained runtimes (WebGL/WebGPU-based engines, browser
+	 * builds, mobile ports). When enabled, ALS skips the root-motion mantle montage entirely and
+	 * only performs the timeline-driven positional correction, which avoids streaming heavy
+	 * animation assets and per-frame bone evaluation costs on platforms with limited budgets.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mantle System|Lightweight Profile")
+	bool bUseLightweightMantle = false;
+
+	/** Fixed play rate used by the positional-correction timeline in the lightweight profile. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mantle System|Lightweight Profile", meta = (EditCondition = "bUseLightweightMantle", UIMin = "0.1", ClampMin = "0.1"))
+	float LightweightTimelinePlayRate = 1.0f;
 };
 
 USTRUCT(BlueprintType)
