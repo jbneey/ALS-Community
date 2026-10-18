@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ALS Web Demo — портированная система анимаций персонажа</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #10131a; font-family: 'Segoe UI', system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+
+    .hud { position: fixed; color: #dfe6f2; pointer-events: none; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+
+    /* ALS debug component equivalent */
+    #hud-state {
+      top: 16px; left: 16px; background: rgba(14,18,28,.78); border: 1px solid rgba(120,160,255,.25);
+      border-radius: 10px; padding: 12px 16px; min-width: 290px; backdrop-filter: blur(6px);
+    }
+    #hud-state h1 { font-size: 13px; letter-spacing: 2px; color: #7fa8ff; margin-bottom: 8px; text-transform: uppercase; }
+    .row { display: flex; justify-content: space-between; font-size: 12.5px; line-height: 1.75; }
+    .row b { color: #ffd27f; font-weight: 600; }
+    .sec { margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(120,160,255,.2); font-size: 11px; color: #8ea0c0; text-transform: uppercase; letter-spacing: 1px; }
+    #provider-log { font-size: 11px; color: #9fd0a5; line-height: 1.5; }
+
+    #hud-keys {
+      bottom: 16px; left: 16px; background: rgba(14,18,28,.78); border: 1px solid rgba(120,160,255,.25);
+      border-radius: 10px; padding: 10px 14px; font-size: 12px; line-height: 1.8; backdrop-filter: blur(6px);
+    }
+    kbd { background: #2a3350; border: 1px solid #4a5a8a; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; font-family: monospace; font-size: 11px; color: #cfe0ff; }
+
+    #overlay-start {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(16,20,32,.55), rgba(8,10,16,.92)); z-index: 10; cursor: pointer;
+    }
+    #overlay-start.hidden { display: none; }
+    .panel { max-width: 640px; text-align: center; color: #e8eefc; padding: 34px 44px; }
+    .panel h1 { font-size: 30px; margin-bottom: 6px; color: #fff; }
+    .panel h2 { font-size: 14px; font-weight: 400; color: #7fa8ff; margin-bottom: 22px; }
+    .panel p { font-size: 13.5px; color: #b8c6e2; line-height: 1.8; margin-bottom: 14px; }
+    .panel .cta { margin-top: 18px; font-size: 15px; color: #ffd27f; animation: pulse 1.6s infinite; }
+    @keyframes pulse { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
+    .cols { display: flex; gap: 26px; text-align: left; justify-content: center; margin-top: 10px; font-size: 12.5px; }
+    .cols div { background: rgba(30,40,70,.5); border-radius: 8px; padding: 10px 14px; }
+
+    #toggle-headless {
+      position: fixed; top: 16px; right: 16px; z-index: 5; pointer-events: auto;
+      background: rgba(14,18,28,.85); color: #cfe0ff; border: 1px solid rgba(120,160,255,.35);
+      border-radius: 8px; padding: 8px 14px; font-size: 12px; cursor: pointer;
+    }
+    #toggle-headless:hover { background: rgba(40,55,90,.9); }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <button id="toggle-headless" title="Имитация выделенного сервера: провайдер анимации становится headless, геймплей ALS продолжает работать">Headless-режим (H)</button>
+
+  <div id="hud-state" class="hud">
+    <h1>ALS Character System</h1>
+    <div class="row"><span>Movement State</span><b id="v-state">—</b></div>
+    <div class="row"><span>Movement Action</span><b id="v-action">—</b></div>
+    <div class="row"><span>Gait / Speed</span><b id="v-gait">—</b></div>
+    <div class="row"><span>Rotation Mode</span><b id="v-rot">—</b></div>
+    <div class="row"><span>Stance / View</span><b id="v-stance">—</b></div>
+    <div class="row"><span>Overlay</span><b id="v-overlay">—</b></div>
+    <div class="row"><span>Hips Direction</span><b id="v-hips">—</b></div>
+    <div class="row"><span>Stride / Diagonal blend</span><b id="v-blend">—</b></div>
+    <div class="row"><span>Mantle trace</span><b id="v-mantle">—</b></div>
+    <div class="sec">IALSAnimationProviderInterface log</div>
+    <div id="provider-log">booting…</div>
+  </div>
+
+  <div id="hud-keys" class="hud">
+    <kbd>W A S D</kbd> движение · <kbd>Shift</kbd> спринт · <kbd>Alt</kbd> ходьба · <kbd>Space</kbd> прыжок (двойной = кувырок)<br/>
+    <kbd>Q</kbd> мантл · <kbd>P</kbd> кувырок · <kbd>E</kbd> падение (ragdoll) · <kbd>Ctrl</kbd> присед · <kbd>ЛКМ</kbd> прицеливание<br/>
+    <kbd>Tab</kbd> режим вращения · <kbd>V</kbd> 1-е / 3-е лицо · <kbd>B</kbd> оверлей · <kbd>H</kbd> headless-сервер
+  </div>
+
+  <div id="overlay-start">
+    <div class="panel">
+      <h1>ALS WEB DEMO</h1>
+      <h2>Порт системы анимированных локомоций ALS-Community на веб-движок (Three.js)</h2>
+      <p>
+        Полная демонстрация портированной системы: трёхуровневая машина состояний движения
+        (Grounded / InAir / Mantling / Ragdoll), movement-экшены (мантлы, кувырки, подъём),
+        авто-определение аллюра с гистерезисом, три режима вращения (Velocity / Looking / Aiming),
+        stance и view-режимы, оверлеи, камера с lag и подтягиванием к стенам — и главное:
+        <b style="color:#ffd27f">весь слой анимации идёт через ALSAnimationProviderInterface</b>,
+        а не через API конкретного рендера.
+      </p>
+      <div class="cols">
+        <div><b>Попробуйте:</b><br/>Подойдите к низкой стене → <kbd>Q</kbd> (LowMantle)<br/>К ящику 2м → <kbd>Q</kbd> (HighMantle)</div>
+        <div><b>Проверьте:</b><br/>Высокая серая стена — мантл отклоняется<br/>На бегу <kbd>E</kbd> → ragdoll → GetUp</div>
+        <div><b>Headless (H):</b><br/>Провайдер возвращает Unavailable,<br/>геймплей работает без визуалов</div>
+      </div>
+      <div class="cta">Кликните, чтобы захватить мышь и начать</div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
