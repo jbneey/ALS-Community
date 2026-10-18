@@ -14,6 +14,7 @@ import { ALSPlayerCameraManager } from './als/cameraManager.js';
 import { EnumNames } from './als/enums.js';
 import { ALSWorld, toThree } from './game/threeWorld.js';
 import { ALSProceduralVisual } from './game/proceduralVisual.js';
+import { ALSModelVisual } from './game/modelVisual.js';
 import { ALSPlayerController } from './game/playerController.js';
 
 // ---------------- renderer / scene ----------------
@@ -69,9 +70,87 @@ function roundRect(cx, x, y, w, h, r) {
 }
 
 // ---------------- ALS character stack ----------------
-const visual = new ALSProceduralVisual(scene);
+const proceduralVisual = new ALSProceduralVisual(scene);
+let visual = proceduralVisual;   // active visual (procedural or user model)
 let provider = new ALSProceduralAnimationProvider(visual);
 registerMontages(provider);
+
+// ---- custom character model upload (.glb / .gltf) ----
+const modelInput = document.createElement('input');
+modelInput.type = 'file';
+modelInput.accept = '.glb,.gltf';
+modelInput.style.display = 'none';
+document.body.appendChild(modelInput);
+
+const btnModel = document.createElement('button');
+btnModel.id = 'toggle-model';
+btnModel.textContent = 'Загрузить модель (.glb)';
+document.body.appendChild(btnModel);
+btnModel.addEventListener('click', () => {
+  if (visual !== proceduralVisual) { switchToProcedural(); return; }
+  modelInput.click();
+});
+
+modelInput.addEventListener('change', async () => {
+  const file = modelInput.files[0];
+  if (!file) return;
+  if (!ALSModelVisual.canLoad(file)) { alert('Нужен формат glTF 2.0: .glb (рекомендуется) или .gltf'); return; }
+  try {
+    const buffer = await file.arrayBuffer();
+    switchToModel(buffer, file.name);
+  } catch (e) {
+    alert('Не удалось прочитать файл: ' + e.message);
+  }
+  modelInput.value = '';
+});
+
+function switchToModel(buffer, name) {
+  const mv = new ALSModelVisual(scene, { buffer });
+  mv.onLoaded = (v) => {
+    if (!v.hasSkeleton) {
+      statusEl.textContent = `Модель «${name}» загружена, но скелет не распознан — работает режим whole-body.`;
+    } else {
+      const slots = Object.keys(v.bones).length;
+      statusEl.textContent = `Модель «${name}»: скелет распознан (${slots} костей), ALS-анимация подключена.`;
+    }
+  };
+  mv.loadError = null;
+  visual = mv;
+  provider.visual = mv;               // provider talks to the visual only via interface fields
+  btnModel.textContent = 'Сбросить на процедурного персонажа';
+  statusEl.style.display = 'block';
+  facingSelect.style.display = 'inline-block';
+  applyFacing();
+}
+
+function switchToProcedural() {
+  scene.remove(visual.root);
+  visual = proceduralVisual;
+  provider.visual = visual;
+  btnModel.textContent = 'Загрузить модель (.glb)';
+  statusEl.style.display = 'none';
+  facingSelect.style.display = 'none';
+}
+
+// facing correction for models that don't face +X like the procedural rig
+const facingSelect = document.createElement('select');
+facingSelect.id = 'facing-select';
+facingSelect.style.display = 'none';
+[['Вперёд = -Z (mixamo/Blender)', 90], ['Вперёд = +Z', -90], ['Вперёд = +X (как у нас)', 0], ['Вперёд = -X', 180]]
+  .forEach(([label, deg]) => {
+    const o = document.createElement('option');
+    o.textContent = label; o.value = deg; facingSelect.appendChild(o);
+  });
+document.body.appendChild(facingSelect);
+facingSelect.addEventListener('change', applyFacing);
+function applyFacing() {
+  if (visual instanceof ALSModelVisual) visual.facingOffset = parseFloat(facingSelect.value) || 0;
+}
+
+const statusEl = document.createElement('div');
+statusEl.id = 'model-status';
+statusEl.style.display = 'none';
+document.body.appendChild(statusEl);
 
 const character = new ALSBaseCharacter({
   name: 'ALS_WebCharacter',
@@ -100,6 +179,7 @@ function setHeadless(on) {
     btn.textContent = 'Headless-режим (H)';
   }
 }
+
 const btn = document.getElementById('toggle-headless');
 btn.addEventListener('click', () => setHeadless(!(character.animationProvider instanceof ALSProceduralAnimationProvider)));
 playerController.headlessToggle = () => setHeadless(!(character.animationProvider instanceof ALSProceduralAnimationProvider));
