@@ -49,6 +49,24 @@
       border-radius: 8px; padding: 8px 14px; font-size: 12px; cursor: pointer;
     }
     #toggle-headless:hover { background: rgba(40,55,90,.9); }
+
+    /* custom model upload controls */
+    #toggle-model {
+      position: fixed; top: 56px; right: 16px; z-index: 5; pointer-events: auto;
+      background: rgba(14,18,28,.85); color: #cfe0ff; border: 1px solid rgba(120,160,255,.35);
+      border-radius: 8px; padding: 8px 14px; font-size: 12px; cursor: pointer;
+    }
+    #toggle-model:hover { background: rgba(40,55,90,.9); }
+    #facing-select {
+      position: fixed; top: 96px; right: 16px; z-index: 5; pointer-events: auto;
+      background: rgba(14,18,28,.85); color: #cfe0ff; border: 1px solid rgba(120,160,255,.35);
+      border-radius: 8px; padding: 6px 8px; font-size: 11.5px; max-width: 240px;
+    }
+    #model-status {
+      position: fixed; top: 132px; right: 16px; z-index: 5; width: 240px;
+      background: rgba(14,18,28,.85); color: #9fd0a5; border: 1px solid rgba(120,160,255,.25);
+      border-radius: 8px; padding: 8px 12px; font-size: 11.5px; line-height: 1.5;
+    }
   </style>
   <script type="importmap">
     { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
@@ -96,6 +114,7 @@
         <div><b>Попробуйте:</b><br/>Подойдите к низкой стене → <kbd>Q</kbd> (LowMantle)<br/>К ящику 2м → <kbd>Q</kbd> (HighMantle)</div>
         <div><b>Проверьте:</b><br/>Высокая серая стена — мантл отклоняется<br/>На бегу <kbd>E</kbd> → ragdoll → GetUp</div>
         <div><b>Headless (H):</b><br/>Провайдер возвращает Unavailable,<br/>геймплей работает без визуалов</div>
+        <div><b>Своя модель:</b><br/>Кнопка справа сверху — загрузите персонажа в формате <b>glTF 2.0 (.glb)</b><br/>Скелет humanoid распознаётся автоматически</div>
       </div>
       <div class="cta">Кликните, чтобы захватить мышь и начать</div>
     </div>
